@@ -6,6 +6,7 @@ from config.settings import settings
 from bot.handlers import start
 from bot.handlers import news
 
+from bot.handlers import scenarios
 
 async def start_bot():
 
@@ -14,6 +15,7 @@ async def start_bot():
 
     dp.include_router(start.router)
     dp.include_router(news.router)
+    dp.include_router(scenarios.router)
 
     await dp.start_polling(bot)
 
