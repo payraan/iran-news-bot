@@ -18,44 +18,99 @@ RSS_FEEDS = [
 ]
 
 
+IRAN_KEYWORDS = [
+    "iran",
+    "iranian",
+    "tehran",
+    "khamenei",
+    "ayatollah",
+    "israel iran",
+    "iran nuclear",
+    "iran missile",
+    "iran sanctions",
+    "iran oil",
+    "persian gulf"
+]
+
+
+def is_about_iran(title: str, content: str) -> bool:
+    """
+    بررسی می‌کند آیا خبر مربوط به ایران است یا نه
+    """
+
+    text = f"{title} {content}".lower()
+
+    return any(keyword in text for keyword in IRAN_KEYWORDS)
+
+
 async def collect_rss_news():
 
     async with AsyncSessionLocal() as session:
 
         # گرفتن embedding خبرهای قبلی
         result = await session.execute(select(News.embedding))
-        existing_embeddings = [
-            eval(row[0]) for row in result.fetchall() if row[0]
-        ]
+
+        existing_embeddings = []
+
+        for row in result.fetchall():
+            if row[0]:
+                try:
+                    existing_embeddings.append(eval(row[0]))
+                except Exception:
+                    continue
 
         for feed_url in RSS_FEEDS:
 
-            feed = feedparser.parse(feed_url)
+            try:
+                feed = feedparser.parse(feed_url)
+            except Exception:
+                continue
+
+            if not feed.entries:
+                continue
 
             for entry in feed.entries[:10]:
 
-                # URL duplicate check
-                exists = await news_exists(session, entry.link)
+                title = entry.title if hasattr(entry, "title") else ""
+                content = entry.get("summary", "") if hasattr(entry, "get") else ""
 
-                if exists:
+                # فیلتر خبرهای غیر مرتبط با ایران
+                if not is_about_iran(title, content):
                     continue
 
-                # ساخت embedding عنوان خبر
-                embedding = compute_embedding(entry.title)
+                # بررسی duplicate URL
+                try:
+                    exists = await news_exists(session, entry.link)
+                    if exists:
+                        continue
+                except Exception:
+                    continue
+
+                # ساخت embedding
+                try:
+                    embedding = compute_embedding(title)
+                except Exception:
+                    continue
 
                 # semantic duplicate detection
                 if is_duplicate(embedding, existing_embeddings):
                     continue
 
-                news = News(
-                    title=entry.title,
-                    content=entry.get("summary", ""),
-                    source=feed.feed.get("title", "unknown"),
-                    url=entry.link,
-                    embedding=str(embedding.tolist()),
-                    published_at=datetime.utcnow()
-                )
+                try:
+                    news = News(
+                        title=title,
+                        content=content,
+                        source=feed.feed.get("title", "unknown"),
+                        url=entry.link,
+                        embedding=str(embedding.tolist()),
+                        published_at=datetime.utcnow()
+                    )
 
-                session.add(news)
+                    session.add(news)
+
+                    existing_embeddings.append(embedding.tolist())
+
+                except Exception:
+                    continue
 
         await session.commit()

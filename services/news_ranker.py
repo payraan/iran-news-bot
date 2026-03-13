@@ -1,86 +1,60 @@
-from datetime import datetime
+from datetime import datetime, timedelta
+from sqlalchemy import select
+
 from database.models import News
 
 
 SOURCE_WEIGHTS = {
-    "Reuters": 3.0,
-    "BBC": 2.8,
-    "Al Jazeera": 2.5,
-    "The Guardian": 2.3,
-    "Associated Press": 2.8,
+    "Reuters": 5,
+    "The Guardian": 4,
+    "The Economist": 4,
+    "New York Times": 4,
+    "BBC": 4,
+    "NBC News": 3,
+    "Al Jazeera": 3
 }
 
 
-KEYWORDS = [
-    "iran",
-    "nuclear",
-    "sanctions",
-    "israel",
-    "oil",
-    "hezbollah",
-    "missile",
-]
-
-
-def keyword_score(text: str) -> float:
-
-    score = 0
-
-    text_lower = text.lower()
-
-    for kw in KEYWORDS:
-        if kw in text_lower:
-            score += 1
-
-    return score
+def source_score(source: str):
+    for key in SOURCE_WEIGHTS:
+        if key.lower() in source.lower():
+            return SOURCE_WEIGHTS[key]
+    return 1
 
 
 def recency_score(published_at):
-
-    if not published_at:
-        return 0
-
     hours = (datetime.utcnow() - published_at).total_seconds() / 3600
-
-    if hours < 6:
-        return 3
-
-    if hours < 24:
-        return 2
-
-    if hours < 72:
-        return 1
-
-    return 0.5
+    return max(0, 10 - hours)
 
 
-def source_score(source):
+def importance_score(news):
 
-    if not source:
-        return 1
+    s_score = source_score(news.source or "")
+    r_score = recency_score(news.published_at)
 
-    return SOURCE_WEIGHTS.get(source, 1)
-
-
-def compute_importance(news: News):
-
-    score = 0
-
-    score += recency_score(news.published_at)
-
-    score += source_score(news.source)
-
-    score += keyword_score(news.title + " " + (news.content or ""))
+    score = (0.6 * s_score) + (0.4 * r_score)
 
     return score
 
 
-def rank_news(news_list):
+async def get_top_news(session, limit=5):
 
-    ranked = sorted(
-        news_list,
-        key=lambda n: compute_importance(n),
-        reverse=True
+    # فقط خبرهای 48 ساعت اخیر
+    window = datetime.utcnow() - timedelta(hours=48)
+
+    result = await session.execute(
+        select(News)
+        .where(News.published_at > window)
     )
 
-    return ranked
+    news_list = result.scalars().all()
+
+    scored = []
+
+    for news in news_list:
+        score = importance_score(news)
+        scored.append((score, news))
+
+    scored.sort(key=lambda x: x[0], reverse=True)
+
+    return [n for _, n in scored[:limit]]
