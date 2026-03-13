@@ -104,8 +104,14 @@ def is_about_iran(title: str, content: str) -> bool:
 
     text = f"{title} {content}".lower()
 
-    return any(keyword in text for keyword in IRAN_KEYWORDS)
+    score = 0
 
+    for keyword in IRAN_KEYWORDS:
+        if keyword in text:
+            score += 1
+
+    # حداقل دو اشاره به ایران
+    return score >= 2
 
 # ----------------------------
 # Process single feed
@@ -122,7 +128,7 @@ async def process_feed(feed_url, session, existing_embeddings):
         return
 
 
-    for entry in feed.entries[:150]:
+    for entry in feed.entries[:50]:
 
         title = getattr(entry, "title", "")
         content = entry.get("summary", "")

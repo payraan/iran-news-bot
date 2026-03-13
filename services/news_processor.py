@@ -6,23 +6,45 @@ from database.models import News
 from services.summarizer import summarize_news
 
 
+BATCH_SIZE = 50
+
+
 async def process_news():
 
     async with AsyncSessionLocal() as session:
 
         result = await session.execute(
-            select(News).where(News.summary == None)
+            select(News)
+            .where(News.summary == None)
+            .order_by(News.published_at.desc())
+            .limit(BATCH_SIZE)
         )
 
         news_items = result.scalars().all()
 
+        if not news_items:
+            print("No news to process.")
+            return
+
+        print(f"Processing {len(news_items)} news summaries...")
+
         for news in news_items:
 
-            summary = await summarize_news(
-                news.title,
-                news.content or ""
-            )
+            try:
 
-            news.summary = summary
+                summary = await summarize_news(
+                    news.title,
+                    news.content or ""
+                )
+
+                news.summary = summary
+
+            except Exception as e:
+
+                print(f"Summarization failed for: {news.title}")
+                print(e)
+                continue
 
         await session.commit()
+
+        print("News processing batch completed.")
