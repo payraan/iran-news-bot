@@ -40,7 +40,7 @@ def importance_score(news):
 async def get_top_news(session, limit=5):
 
     # فقط خبرهای 48 ساعت اخیر
-    window = datetime.utcnow() - timedelta(hours=48)
+    window = datetime.utcnow() - timedelta(hours=12)
 
     result = await session.execute(
         select(News)

@@ -97,13 +97,21 @@ async def collect_rss_news():
                     continue
 
                 try:
+                    published = datetime.utcnow()
+
+                    if hasattr(entry, "published_parsed") and entry.published_parsed:
+                        try:
+                            published = datetime(*entry.published_parsed[:6])
+                        except Exception:
+                            pass
+
                     news = News(
                         title=title,
                         content=content,
                         source=feed.feed.get("title", "unknown"),
                         url=entry.link,
                         embedding=str(embedding.tolist()),
-                        published_at=datetime.utcnow()
+                        published_at=published
                     )
 
                     session.add(news)

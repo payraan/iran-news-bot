@@ -1,21 +1,18 @@
 import asyncio
 
 from database.connection import AsyncSessionLocal
-from database.queries import get_latest_news
-
-from services.news_ranker import rank_news
+from services.news_ranker import get_top_news
 
 
 async def main():
 
     async with AsyncSessionLocal() as session:
 
-        news = await get_latest_news(session)
+        ranked_news = await get_top_news(session)
 
-        ranked = rank_news(news)
-
-        for n in ranked[:5]:
-            print(n.title)
+        for news in ranked_news:
+            print(news.title)
 
 
-asyncio.run(main())
+if __name__ == "__main__":
+    asyncio.run(main())
