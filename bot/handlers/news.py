@@ -4,6 +4,7 @@ from aiogram.types import Message
 from database.connection import AsyncSessionLocal
 from services.news_ranker import get_top_news
 from services.topic_detector import detect_topics
+from services.breaking_news import detect_breaking_news
 
 from cache.redis_client import redis_client
 
@@ -16,25 +17,34 @@ CACHE_KEY = "latest_news_report"
 CACHE_TTL = 60 * 30  # 30 minutes
 
 
+# ----------------------------
+# Text cleaning
+# ----------------------------
+
 def clean_text(text: str):
 
     if not text:
         return ""
 
-    # حذف HTML
+    # remove HTML
     text = re.sub(r"<.*?>", "", text)
 
-    # حذف newline اضافی
+    # remove extra newline
     text = text.replace("\n", " ").strip()
 
     return text
 
 
-def build_message(topics, news_list):
+# ----------------------------
+# Topic message
+# ----------------------------
+
+def build_topic_message(topics):
 
     text = "🔥 موضوعات داغ:\n\n"
 
     if topics:
+
         for i, topic in enumerate(topics, start=1):
 
             if isinstance(topic, tuple):
@@ -44,50 +54,86 @@ def build_message(topics, news_list):
 
             text += f"{i}️⃣ {topic_name}\n"
 
-    text += "\n📰 مهم‌ترین خبرهای اخیر ایران:\n\n"
+    return text
 
-    for news in news_list:
 
-        summary = news.summary
+# ----------------------------
+# News message
+# ----------------------------
 
-        if not summary:
-            summary = news.content[:200] if news.content else ""
+def build_news_message(news):
 
-        summary = clean_text(summary)
+    summary = news.summary
 
-        text += f"🔹 {news.title}\n"
-        text += f"{summary}\n"
-        text += f"{news.url}\n\n"
+    if not summary:
+        summary = news.content[:200] if news.content else ""
+
+    summary = clean_text(summary)
+
+    text = (
+        f"📰 {news.title}\n\n"
+        f"{summary}\n\n"
+        f"{news.url}"
+    )
 
     return text
 
 
-async def send_long_message(message: Message, text: str):
+# ----------------------------
+# Send news list
+# ----------------------------
 
-    MAX_LENGTH = 4000
+async def send_news_list(message: Message, topics, news_list):
 
-    for i in range(0, len(text), MAX_LENGTH):
-        chunk = text[i:i + MAX_LENGTH]
-        await message.answer(chunk)
+    # Breaking news detection
+    breaking = detect_breaking_news(news_list)
 
+    if breaking:
+
+        alert = "🚨 خبر فوری:\n\n"
+
+        for title in breaking:
+            alert += f"• {title}\n"
+
+        await message.answer(alert)
+
+
+    # Topics
+    topic_text = build_topic_message(topics)
+    await message.answer(topic_text)
+
+
+    # Send news (one message per news)
+    for news in news_list:
+
+        text = build_news_message(news)
+
+        await message.answer(text)
+
+
+# ----------------------------
+# Telegram handler
+# ----------------------------
 
 @router.message(lambda m: m.text == "چه خبر از ایران؟")
 async def latest_news(message: Message):
 
     cached = redis_client.get(CACHE_KEY)
 
+    # اگر cache وجود داشت فقط پیام ساده بده
     if cached:
-        await send_long_message(message, cached)
+
+        await message.answer("⏱ در حال حاضر آخرین گزارش ارسال شده است. کمی بعد دوباره امتحان کنید.")
         return
+
 
     async with AsyncSessionLocal() as session:
 
-        news_list = await get_top_news(session)
+        news_list = await get_top_news(session, limit=20)
 
         topics = detect_topics(session)
 
-        text = build_message(topics, news_list)
+        await send_news_list(message, topics, news_list)
 
-        redis_client.setex(CACHE_KEY, CACHE_TTL, text)
-
-        await send_long_message(message, text)
+        # set cache
+        redis_client.setex(CACHE_KEY, CACHE_TTL, "sent")

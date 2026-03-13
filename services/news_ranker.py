@@ -37,7 +37,7 @@ def importance_score(news):
     return score
 
 
-async def get_top_news(session, limit=5):
+async def get_top_news(session, limit=15):
 
     # فقط خبرهای 48 ساعت اخیر
     window = datetime.utcnow() - timedelta(hours=12)
