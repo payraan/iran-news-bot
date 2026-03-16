@@ -4,6 +4,7 @@ from database.connection import AsyncSessionLocal
 from database.models import News
 
 from services.summarizer import summarize_news
+from services.sentiment_analyzer import analyze_news_sentiment
 
 
 BATCH_SIZE = 50
@@ -39,9 +40,20 @@ async def process_news():
 
                 news.summary = summary
 
+                # ----------------------------
+                # Sentiment analysis
+                # ----------------------------
+
+                sentiment_score = analyze_news_sentiment(
+                    news.title,
+                    summary
+                )
+
+                news.sentiment = sentiment_score
+
             except Exception as e:
 
-                print(f"Summarization failed for: {news.title}")
+                print(f"Processing failed for: {news.title}")
                 print(e)
                 continue
 

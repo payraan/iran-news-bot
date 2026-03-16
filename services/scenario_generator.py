@@ -1,10 +1,7 @@
 from google import genai
 from config.settings import settings
 
-from database.connection import AsyncSessionLocal
-from database.models import News
-
-from sqlalchemy import select
+from services.trend_analyzer import build_weekly_report
 
 
 client = genai.Client(api_key=settings.GEMINI_API_KEY)
@@ -12,40 +9,36 @@ client = genai.Client(api_key=settings.GEMINI_API_KEY)
 
 async def generate_scenarios():
 
-    async with AsyncSessionLocal() as session:
+    # -------------------------
+    # build weekly analysis report
+    # -------------------------
 
-        result = await session.execute(
-            select(News)
-            .where(News.summary != None)
-            .order_by(News.published_at.desc())
-            .limit(15)
-        )
+    weekly_report = await build_weekly_report()
 
-        news_list = result.scalars().all()
+    if not weekly_report:
+        return "در ۷ روز گذشته داده خبری کافی برای تحلیل وجود ندارد."
 
-        if not news_list:
-            return "داده خبری کافی برای تحلیل وجود ندارد."
-
-        news_text = ""
-
-        for news in news_list:
-            news_text += f"خبر: {news.title}\n"
-            news_text += f"خلاصه: {news.summary}\n\n"
+    # -------------------------
+    # build AI prompt
+    # -------------------------
 
     prompt = f"""
 تو یک تحلیلگر ژئوپلیتیک هستی.
 
-بر اساس خبرهای زیر درباره ایران، آینده کوتاه‌مدت ایران را تحلیل کن.
+بر اساس گزارش تحلیلی زیر از خبرهای ۷ روز گذشته درباره ایران،
+سناریوهای احتمالی برای هفته آینده در ایران را پیش‌بینی کن.
 
 قوانین مهم:
-- فقط از اطلاعات موجود در خبرها استفاده کن
-- اگر خبری به ایران مربوط نیست آن را نادیده بگیر
+
+- فقط از اطلاعات موجود در گزارش استفاده کن
 - اطلاعات جدید یا فرضی اضافه نکن
-- تحلیل مختصر و واضح باشد
+- تحلیل منطقی و واقع‌گرایانه باشد
 - هر سناریو حداکثر 4 جمله باشد
 - پاسخ به زبان فارسی باشد
 
 ساختار پاسخ باید دقیقاً این باشد:
+
+🔮 پیش‌بینی هفته آینده در ایران
 
 🔴 بدترین سناریو
 (تحلیل کوتاه)
@@ -56,8 +49,8 @@ async def generate_scenarios():
 🟢 بهترین سناریو
 (تحلیل کوتاه)
 
-خبرها:
-{news_text}
+گزارش تحلیلی:
+{weekly_report}
 """
 
     try:

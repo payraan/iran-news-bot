@@ -110,8 +110,33 @@ def is_about_iran(title: str, content: str) -> bool:
         if keyword in text:
             score += 1
 
-    # حداقل دو اشاره به ایران
     return score >= 2
+
+
+# ----------------------------
+# Extract real news source
+# ----------------------------
+
+def extract_source(entry, feed):
+
+    # Google News entries usually contain the real source
+    try:
+        if hasattr(entry, "source") and entry.source:
+            source_title = entry.source.get("title")
+            if source_title:
+                return source_title
+    except Exception:
+        pass
+
+    # fallback to feed title
+    try:
+        if hasattr(feed, "feed"):
+            return feed.feed.get("title", "unknown")
+    except Exception:
+        pass
+
+    return "unknown"
+
 
 # ----------------------------
 # Process single feed
@@ -127,7 +152,6 @@ async def process_feed(feed_url, session, existing_embeddings):
     if not feed.entries:
         return
 
-
     for entry in feed.entries[:50]:
 
         title = getattr(entry, "title", "")
@@ -136,11 +160,9 @@ async def process_feed(feed_url, session, existing_embeddings):
         if not title:
             continue
 
-
         # Iran filter
         if not is_about_iran(title, content):
             continue
-
 
         # URL duplicate check
         try:
@@ -150,18 +172,15 @@ async def process_feed(feed_url, session, existing_embeddings):
         except Exception:
             continue
 
-
         # embedding
         try:
             embedding = compute_embedding(title)
         except Exception:
             continue
 
-
         # semantic duplicate
         if is_duplicate(embedding, existing_embeddings):
             continue
-
 
         published = datetime.utcnow()
 
@@ -171,13 +190,15 @@ async def process_feed(feed_url, session, existing_embeddings):
             except Exception:
                 pass
 
+        # extract normalized source
+        source = extract_source(entry, feed)
 
         try:
 
             news = News(
                 title=title,
                 content=content,
-                source=feed.feed.get("title", "unknown"),
+                source=source,
                 url=entry.link,
                 embedding=str(embedding.tolist()),
                 published_at=published
@@ -213,7 +234,6 @@ async def collect_rss_news():
             except Exception:
                 continue
 
-
         tasks = []
 
         for feed_url in RSS_FEEDS:
@@ -221,7 +241,6 @@ async def collect_rss_news():
             tasks.append(
                 process_feed(feed_url, session, existing_embeddings)
             )
-
 
         await asyncio.gather(*tasks)
 
