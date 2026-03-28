@@ -1,6 +1,7 @@
 import asyncio
 import feedparser
 import urllib.parse
+import json
 
 from datetime import datetime
 from sqlalchemy import select
@@ -230,7 +231,7 @@ async def collect_rss_news():
                 continue
 
             try:
-                existing_embeddings.append(eval(row[0]))
+                existing_embeddings.append(json.loads(row[0]))
             except Exception:
                 continue
 

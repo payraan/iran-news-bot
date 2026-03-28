@@ -44,7 +44,7 @@ async def process_news():
                 # Sentiment analysis
                 # ----------------------------
 
-                sentiment_score = analyze_news_sentiment(
+                sentiment_score = await analyze_news_sentiment(
                     news.title,
                     summary
                 )

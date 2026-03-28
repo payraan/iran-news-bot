@@ -131,7 +131,7 @@ async def latest_news(message: Message):
 
         news_list = await get_top_news(session, limit=20)
 
-        topics = detect_topics(session)
+        topics = detect_topics(news_list)
 
         await send_news_list(message, topics, news_list)
 
