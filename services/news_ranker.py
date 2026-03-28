@@ -46,7 +46,7 @@ def importance_score(news):
 
 async def get_top_news(session, limit=15):
 
-    window = datetime.utcnow() - timedelta(hours=12)
+    window = datetime.utcnow() - timedelta(days=2)
 
     result = await session.execute(
         select(News).where(News.published_at > window)

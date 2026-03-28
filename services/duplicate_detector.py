@@ -13,7 +13,7 @@ def compute_embedding(text: str):
     # حتماً باید تبدیل به Numpy Array بشه تا متد tolist در فایل‌های دیگه ارور نده
     return np.array(response.embeddings[0].values)
 
-def is_duplicate(new_embedding, existing_embeddings, threshold=0.85):
+def is_duplicate(new_embedding, existing_embeddings, threshold=0.95):
     if len(existing_embeddings) == 0:
         return False
 
