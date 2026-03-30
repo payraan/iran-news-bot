@@ -7,29 +7,23 @@ from database.connection import AsyncSessionLocal
 from database.models import News
 from database.queries import news_exists
 
-# ----------------------------
-# Base RSS feeds
-# ----------------------------
+# --- تریک هکری: تغییر User-Agent تا گوگل ما را به چشم یک کاربر واقعی (مرورگر کروم) ببیند ---
+feedparser.USER_AGENT = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+
 BASE_RSS_FEEDS = [
     "https://feeds.bbci.co.uk/news/world/rss.xml",
     "https://www.aljazeera.com/xml/rss/all.xml",
     "https://www.theguardian.com/world/rss",
     "https://www.reuters.com/world/middle-east/rss",
     "https://rss.cnn.com/rss/edition_world.rss",
-    "https://rss.politico.com/politics-news.xml",
     "https://feeds.bbci.co.uk/persian/rss.xml",
     "https://iranwire.com/fa/feed",
 ]
 
-# ----------------------------
-# Google News queries
-# ----------------------------
+# کوئری‌های ترکیبی برای گوگل نیوز
 GOOGLE_NEWS_QUERIES = [
-    "iran", "tehran", "iran war", "iran israel", "iran nuclear",
-    "iran sanctions", "iran military", "iran economy", "iran inflation",
-    "iran rial", "iran dollar", "iran oil", "iran government",
-    "iran protests", "iran elections", "iran internet", "iran censorship",
-    "iran cyber attack", "persian gulf tension", "strait of hormuz",
+    "iran", "tehran", "iran war", "iran sanctions", 
+    "اقتصاد ایران", "اخبار ایران", "قیمت دلار تهران"
 ]
 
 RSS_FEEDS = list(BASE_RSS_FEEDS)
@@ -37,15 +31,14 @@ for query in GOOGLE_NEWS_QUERIES:
     encoded = urllib.parse.quote(query)
     RSS_FEEDS.append(f"https://news.google.com/rss/search?q={encoded}")
 
+# --- حل باگ زبان: اضافه شدن کلمات کلیدی فارسی ---
 IRAN_KEYWORDS = [
-    "iran", "iranian", "tehran", "khamenei", "ayatollah",
-    "israel iran", "iran nuclear", "iran missile", "iran sanctions",
-    "iran oil", "persian gulf",
+    "iran", "iranian", "tehran", "khamenei", "ayatollah", "israel", "nuclear",
+    "ایران", "تهران", "خامنه‌ای", "سپاه", "تحریم", "اسرائیل", "دلار", "تورم", "جنگ"
 ]
 
 def is_about_iran(title: str, content: str) -> bool:
     text = f"{title} {content}".lower()
-    # اگر حتی یک کلمه کلیدی هم پیدا شد، خبر تایید است
     for keyword in IRAN_KEYWORDS:
         if keyword in text:
             return True
@@ -64,13 +57,16 @@ def extract_source(entry, feed):
 
 async def process_feed(feed_url, session):
     try:
-        feed = feedparser.parse(feed_url)
-    except Exception:
+        # اجرای feedparser در یک ترد (Thread) جداگانه تا سیستم هنگ نکند
+        feed = await asyncio.to_thread(feedparser.parse, feed_url)
+    except Exception as e:
+        print(f"Error fetching {feed_url}")
         return
+        
     if not feed.entries:
         return
 
-    for entry in feed.entries[:50]:
+    for entry in feed.entries[:30]:
         title = getattr(entry, "title", "")
         content = entry.get("summary", "")
 
@@ -90,13 +86,11 @@ async def process_feed(feed_url, session):
             except Exception:
                 pass
 
-        source = extract_source(entry, feed)
-
         try:
             news = News(
                 title=title,
                 content=content,
-                source=source,
+                source=extract_source(entry, feed),
                 url=entry.link,
                 published_at=published
             )
@@ -106,7 +100,11 @@ async def process_feed(feed_url, session):
 
 async def collect_rss_news():
     async with AsyncSessionLocal() as session:
-        tasks = [process_feed(url, session) for url in RSS_FEEDS]
-        await asyncio.gather(*tasks)
+        # --- حل باگ اسپم گوگل: پردازش یکی یکی با تاخیر نیم ثانیه‌ای ---
+        print("Starting safe RSS collection...")
+        for url in RSS_FEEDS:
+            await process_feed(url, session)
+            await asyncio.sleep(0.5) 
+            
         await session.commit()
-        print("RSS collection completed.")
+        print("RSS collection completed successfully.")
