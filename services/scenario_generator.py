@@ -67,3 +67,34 @@ async def generate_scenarios():
         print("Scenario generation error:", e)
 
         return "در حال حاضر امکان تحلیل سناریو وجود ندارد."
+
+async def generate_daily_report_text():
+    from datetime import datetime, timedelta
+    from sqlalchemy import select
+    from database.connection import AsyncSessionLocal
+    from database.models import News
+
+    async with AsyncSessionLocal() as session:
+        window = datetime.utcnow() - timedelta(hours=24)
+        result = await session.execute(
+            select(News).where(News.published_at > window).where(News.summary != None)
+        )
+        news_list = result.scalars().all()
+
+        if not news_list:
+            return "در ۲۴ ساعت گذشته خبر مهمی برای تحلیل یافت نشد."
+
+        news_summaries = "\n".join([f"- {n.title}" for n in news_list[:30]])
+
+        prompt = f"""
+        تو یک تحلیلگر ارشد اخبار هستی. اخبار ۲۴ ساعت گذشته ایران را در یک پاراگراف کوتاه (حداکثر 4 خط) به زبان فارسی تحلیل و خلاصه کن. 
+        لحنت حرفه‌ای، بی‌احساس و شبیه به گزارش‌های محرمانه باشد.
+        
+        اخبار:
+        {news_summaries}
+        """
+        try:
+            response = client.models.generate_content(model="gemini-2.5-flash", contents=prompt)
+            return response.text
+        except:
+            return "خطا در ارتباط با هوش مصنوعی برای تحلیل ۲۴ ساعته."
