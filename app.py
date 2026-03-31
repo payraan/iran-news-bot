@@ -2,20 +2,17 @@ import streamlit as st
 import random
 import plotly.graph_objects as go
 from streamlit_autorefresh import st_autorefresh
-from sqlalchemy import select, create_engine
-from sqlalchemy.orm import sessionmaker
-from database.models import News
+import asyncio
+
+# اضافه شدن موتور رتبه‌بندی هوشمند به داشبورد
+from database.connection import AsyncSessionLocal
+from services.news_ranker import get_top_news
 from cache.redis_client import redis_client
 from config.settings import settings
 from services.topic_detector import detect_topics 
 
 # --- Auto Refresh System ---
 st_autorefresh(interval=5 * 60 * 1000, key="iran_news_refresh") 
-
-# --- Setup Sync Database ---
-SYNC_DB_URL = settings.DATABASE_URL.replace("+asyncpg", "")
-engine = create_engine(SYNC_DB_URL)
-SyncSession = sessionmaker(bind=engine)
 
 # --- Page Config ---
 st.set_page_config(page_title="Project ORACLE", layout="wide", initial_sidebar_state="collapsed")
@@ -54,13 +51,13 @@ st.markdown(f"""
     <hr style='border-color: #333;'>
 """, unsafe_allow_html=True)
 
-# --- Fetch Data ---
+# --- Fetch Data (Using AI Ranker) ---
 def fetch_dashboard_data():
-    with SyncSession() as session:
-        result = session.execute(
-            select(News).where(News.summary != None).order_by(News.published_at.desc()).limit(20)
-        )
-        return result.scalars().all()
+    async def _fetch():
+        async with AsyncSessionLocal() as session:
+            # دقیقاً همون تابعی که ربات تلگرام استفاده می‌کنه
+            return await get_top_news(session, limit=20)
+    return asyncio.run(_fetch())
 
 news_list = fetch_dashboard_data()
 
@@ -109,7 +106,7 @@ else:
         if daily_report:
             st.markdown(f"<div class='glass-box' style='border-right: 4px solid #00ff41;'><p style='font-size: 0.9rem; line-height: 1.8;'>{daily_report}</p></div>", unsafe_allow_html=True)
         else:
-            st.info("در حال پردازش گزارش ۲۴ ساعته...")
+            st.info("سیستم در حال جمع‌آوری دیتا برای پردازش گزارش ۲۴ ساعته می‌باشد (منتظر بمانید)...")
 
         # --- 7-Day Scenario ---
         st.markdown("<p style='color: #888; letter-spacing: 1px; font-weight: bold;'>// پیش‌بینی آینده (۷ روز)</p>", unsafe_allow_html=True)
