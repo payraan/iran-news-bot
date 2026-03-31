@@ -1,17 +1,23 @@
 import asyncio
+import logging
+
+# تنظیمات حرفه‌ای برای نمایش گزارش لحظه‌به‌لحظه در ترمینال
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S"
+)
 
 from bot.bot import start_bot
 from scheduler.jobs import start_scheduler
 
-
 async def main():
-
-    # start background scheduler
+    logging.info("Starting Project ORACLE Server...")
     start_scheduler()
-
-    # start telegram bot
     await start_bot()
 
-
 if __name__ == "__main__":
-    asyncio.run(main())
+    try:
+        asyncio.run(main())
+    except KeyboardInterrupt:
+        logging.info("Server shut down manually.")
