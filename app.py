@@ -2,17 +2,24 @@ import streamlit as st
 import random
 import plotly.graph_objects as go
 from streamlit_autorefresh import st_autorefresh
-import asyncio
+from datetime import datetime, timedelta
+from sqlalchemy import select, create_engine
+from sqlalchemy.orm import sessionmaker
 
-# اضافه شدن موتور رتبه‌بندی هوشمند به داشبورد
-from database.connection import AsyncSessionLocal
-from services.news_ranker import get_top_news
+from database.models import News
 from cache.redis_client import redis_client
 from config.settings import settings
 from services.topic_detector import detect_topics 
+from services.news_cluster import cluster_news
+from services.news_ranker import importance_score
 
 # --- Auto Refresh System ---
 st_autorefresh(interval=5 * 60 * 1000, key="iran_news_refresh") 
+
+# --- Setup Sync Database ---
+SYNC_DB_URL = settings.DATABASE_URL.replace("+asyncpg", "")
+engine = create_engine(SYNC_DB_URL)
+SyncSession = sessionmaker(bind=engine)
 
 # --- Page Config ---
 st.set_page_config(page_title="Project ORACLE", layout="wide", initial_sidebar_state="collapsed")
@@ -51,13 +58,31 @@ st.markdown(f"""
     <hr style='border-color: #333;'>
 """, unsafe_allow_html=True)
 
-# --- Fetch Data (Using AI Ranker) ---
+# --- Fetch Data (Using Sync AI Ranker) ---
 def fetch_dashboard_data():
-    async def _fetch():
-        async with AsyncSessionLocal() as session:
-            # دقیقاً همون تابعی که ربات تلگرام استفاده می‌کنه
-            return await get_top_news(session, limit=20)
-    return asyncio.run(_fetch())
+    with SyncSession() as session:
+        # ۱. دریافت اخبار ۲ روز گذشته (فقط اونایی که خلاصه شدن)
+        window = datetime.utcnow() - timedelta(days=2)
+        result = session.execute(
+            select(News).where(News.published_at > window).where(News.summary != None)
+        )
+        news_list = result.scalars().all()
+
+        if not news_list:
+            return []
+
+        # ۲. خوشه‌بندی اخبار تکراری (دقیقاً مشابه منطق ربات)
+        clusters = cluster_news(news_list)
+        representatives = []
+        for cluster in clusters:
+            best = max(cluster, key=lambda n: importance_score(n))
+            representatives.append(best)
+
+        # ۳. رتبه‌بندی بر اساس اهمیت
+        scored = [(importance_score(n), n) for n in representatives]
+        scored.sort(key=lambda x: x[0], reverse=True)
+
+        return [n for _, n in scored[:20]]
 
 news_list = fetch_dashboard_data()
 
