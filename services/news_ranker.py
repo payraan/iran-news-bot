@@ -7,6 +7,7 @@ from services.news_cluster import cluster_news
 
 
 SOURCE_WEIGHTS = {
+    "Telegram": 5,
     "Reuters": 5,
     "The Guardian": 4,
     "The Economist": 4,
