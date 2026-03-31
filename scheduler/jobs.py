@@ -1,6 +1,10 @@
 import asyncio
 from apscheduler.schedulers.asyncio import AsyncIOScheduler
+
+# ایمپورت کردن منابع خبرخوان (RSS و تلگرام)
 from services.news_collector.rss_collector import collect_rss_news
+from services.news_collector.telegram_collector import collect_telegram_news
+
 from services.news_processor import process_news
 from services.news_retention import cleanup_old_news
 from services.scenario_generator import generate_daily_report_text
@@ -9,8 +13,9 @@ from cache.redis_client import redis_client
 async def run_news_pipeline():
     print("--- Starting Scheduled News Pipeline (Every 15m) ---")
     
-    # ۱. جمع‌آوری اخبار جدید از تمام منابع
+    # ۱. جمع‌آوری اخبار جدید از تمام منابع (رسمی و زیرزمینی)
     await collect_rss_news()
+    await collect_telegram_news()  # <--- رادار تلگرام اضافه شد!
 
     # ۲. تحلیل، خلاصه سازی و امتیازدهی توسط جمینای
     await process_news()
@@ -29,7 +34,7 @@ async def run_news_pipeline():
 scheduler = AsyncIOScheduler()
 
 def start_scheduler():
-    # تغییر بازه زمانی به ۱۵ دقیقه (بجای ۱ ساعت)
+    # تغییر بازه زمانی به ۱۵ دقیقه
     scheduler.add_job(
         lambda: asyncio.create_task(run_news_pipeline()),
         "interval",
